@@ -1,0 +1,110 @@
+document.addEventListener("DOMContentLoaded", () => {
+  const container = document.querySelector(".when__block");
+  const elements = Array.from(container.querySelectorAll(".when__alert, .when__label"));
+
+  const nodes = elements.map(el => {
+    const rect = el.getBoundingClientRect();
+    const initialX = rect.left + rect.width / 2;
+    const initialY = rect.top + rect.height / 2;
+
+    return {
+      el,
+      width: rect.width,
+      height: rect.height,
+      radius: Math.max(rect.width, rect.height) / 2,
+      x: initialX,
+      y: initialY,
+      vx: 0,
+      vy: 0,
+      offsetX: initialX - container.getBoundingClientRect().left,
+      offsetY: initialY - container.getBoundingClientRect().top,
+      angle: 0
+    };
+  });
+
+  let mouse = { x: -1000, y: -1000 };
+
+  container.addEventListener("mousemove", e => {
+    mouse.x = e.clientX;
+    mouse.y = e.clientY;
+  });
+
+  function boundingForce(containerRect) {
+    const bounceStrength = 1;
+
+    for (const d of nodes) {
+      const halfW = d.width / 2;
+      const halfH = d.height / 2;
+
+      if (d.x - halfW < containerRect.left) {
+        d.x = containerRect.left + halfW;
+        d.vx *= -bounceStrength;
+      }
+      if (d.x + halfW > containerRect.right) {
+        d.x = containerRect.right - halfW;
+        d.vx *= -bounceStrength;
+      }
+      if (d.y - halfH < containerRect.top) {
+        d.y = containerRect.top + halfH;
+        d.vy *= -bounceStrength;
+      }
+      if (d.y + halfH > containerRect.bottom) {
+        d.y = containerRect.bottom - halfH;
+        d.vy *= -bounceStrength;
+      }
+    }
+  }
+
+  d3.forceSimulation(nodes)
+    .alphaDecay(0)
+    .velocityDecay(0) // бесконечное движение
+    .force("collide", d3.forceCollide(d => d.radius + 2).iterations(0.1))
+    .force("cursor", () => {
+      const cursorInfluenceRadius = 150;
+      const cursorPadding = 20;
+
+      for (const d of nodes) {
+        const dx = d.x - mouse.x;
+        const dy = d.y - mouse.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        const minDist = d.radius + cursorPadding;
+
+        if (dist < cursorInfluenceRadius) {
+          const strength = (1 - dist / cursorInfluenceRadius) * 1.0;
+          const pushX = (dx / (dist || 1)) * strength;
+          const pushY = (dy / (dist || 1)) * strength;
+
+          if (dist < minDist) {
+            const repelFactor = (minDist - dist) / minDist;
+            d.vx += pushX * (1 + repelFactor);
+            d.vy += pushY * (1 + repelFactor);
+          }
+          else {
+            d.vx += pushX;
+            d.vy += pushY;
+          }
+        }
+      }
+    })
+    .on("tick", () => {
+      const containerRect = container.getBoundingClientRect();
+
+      boundingForce(containerRect);
+
+      for (const d of nodes) {
+        const maxSpeed = 3;
+        d.vx = Math.max(-maxSpeed, Math.min(maxSpeed, d.vx));
+        d.vy = Math.max(-maxSpeed, Math.min(maxSpeed, d.vy));
+
+        const threshold = 0.05;
+        if (Math.abs(d.vx) > threshold) {
+          d.angle += d.vx * 1.5;
+          d.angle = Math.max(-15, Math.min(15, d.angle));
+        }
+
+        const tx = d.x - containerRect.left - d.offsetX;
+        const ty = d.y - containerRect.top - d.offsetY;
+        d.el.style.transform = `translate(${tx}px, ${ty}px) rotate(${d.angle}deg)`;
+      }
+    });
+});
